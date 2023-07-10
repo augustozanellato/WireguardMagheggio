@@ -1,0 +1,18 @@
+---
+hcloud_token: your_hetzner_token_here
+hetnzer_region: fsn1
+
+vpn_router_type: cax11
+vpn_router_os: ubuntu-22.04
+vpn_router_hostname: vpn-router
+
+cloudflare_token: your_cloudflare_token
+cloudflare_zone: example.com
+vpn_record: ctfwg
+
+profile_count: 50
+
+# Nobody will get angry if we just squat a DoD subnet, right?
+internal_subnet: 205.0.0.0/24
+internal_gw_ip: 205.0.0.254
+ctf_subnet: 10.16.0.0/12

@@ -1,0 +1,26 @@
+---
+- name: Create servers
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  user: root
+  vars_files:
+    - ../config.yml
+  tasks:
+    - name: Install wireguard-tools
+      ansible.builtin.pip:
+        name: wireguard-tools
+        virtualenv: "{{ playbook_dir }}/../.venv"
+    - name: Generate VPN config
+      ansible.builtin.command:
+        creates: "{{ playbook_dir }}/../credentials"
+        chdir: "{{ playbook_dir }}/.."
+        cmd: >-
+          .venv/bin/python wg_generator.py --server {{ vpn_record }}.{{ cloudflare_zone }}
+            --subnet {{ internal_subnet }} --router-ip {{ internal_gw_ip }} --count {{ profile_count }}
+            --output-dir credentials --extra-routes {{ ctf_subnet }}
+    - name: Generate ssh keypair
+      community.crypto.openssh_keypair:
+        path: "{{ playbook_dir }}/../id_vpn_admin"
+        type: ed25519
+      register: ssh_keypair

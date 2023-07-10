@@ -1,0 +1,79 @@
+---
+- name: Generate credentials
+  import_playbook: "generate_creds.yml"
+- name: Create servers
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  user: root
+  vars_files:
+    - ../config.yml
+  tasks:
+    - name: Upload ssh keypair to hetzner
+      hetzner.hcloud.hcloud_ssh_key:
+        api_token: "{{ hcloud_token }}"
+        name: admin-ssh-key
+        public_key: "{{ ssh_keypair.public_key }}"
+        state: present
+    - name: Create vpn-router
+      hetzner.hcloud.hcloud_server:
+        api_token: "{{ hcloud_token }}"
+        name: "{{ vpn_router_hostname }}"
+        server_type: "{{ vpn_router_type }}"
+        image: "{{ vpn_router_os }}"
+        state: present
+        location: "{{ hetnzer_region }}"
+        ssh_keys: ["admin-ssh-key"]
+      register: vpn_router
+    - name: Add vpn-router to inventory
+      ansible.builtin.add_host:
+        name: "vpn-router"
+        groups: [unprovisioned]
+        ansible_host: "{{ vpn_router.hcloud_server.ipv4_address }}"
+    - name: Create vpn router A record
+      community.general.cloudflare_dns:
+        zone: "{{ cloudflare_zone }}"
+        record: "{{ vpn_record }}"
+        type: A
+        value: "{{ vpn_router.hcloud_server.ipv4_address }}"
+        api_token: "{{ cloudflare_token }}"
+
+- name: Vpn router configuration
+  hosts: [vpn-router]
+  vars_files:
+    - ../config.yml
+    - ../group_vars/all.yml
+  user: root
+  gather_facts: false
+  tasks:
+    - name: Wait 600 seconds for target connection to become reachable/usable
+      ansible.builtin.wait_for_connection:
+    - name: Gather facts
+      ansible.builtin.setup:
+    - name: Install packages
+      ansible.builtin.apt:
+        pkg: ["wireguard", "kitty-terminfo", "btop"]
+        update_cache: true
+    - name: Enable ip forwarding
+      ansible.posix.sysctl:
+        name: net.ipv4.ip_forward
+        value: '1'
+        sysctl_set: true
+        state: present
+        reload: true
+    - name: Internal VPN
+      ansible.builtin.include_tasks: ../tasks/copy_and_enable_vpn.yml
+      vars:
+        src: "{{ playbook_dir }}/../credentials/server.conf"
+        dest: "internal"
+    - name: External VPN
+      ansible.builtin.include_tasks: ../tasks/copy_and_enable_vpn.yml
+      vars:
+        src: "{{ playbook_dir }}/../ctf.conf"
+        dest: "external"
+    - name: Setup iptables
+      ansible.builtin.iptables:
+        table: nat
+        chain: POSTROUTING
+        out_interface: external
+        jump: MASQUERADE

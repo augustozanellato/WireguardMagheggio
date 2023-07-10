@@ -1,0 +1,13 @@
+---
+- name: "Copy vpn {{ dest }}"
+  ansible.builtin.copy:
+    src: "{{ src }}"
+    dest: "/etc/wireguard/{{ dest }}.conf"
+    owner: root
+    group: root
+    mode: '0600'
+- name: "Enable and start vpn {{ dest }}"
+  ansible.builtin.systemd:
+    state: started
+    enabled: true
+    name: "wg-quick@{{ dest }}.service"

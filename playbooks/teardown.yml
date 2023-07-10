@@ -1,0 +1,56 @@
+---
+- name: Remove servers
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  user: root
+  vars_files:
+    - ../config.yml
+  tasks:
+    - name: Gather server infos
+      hetzner.hcloud.hcloud_server_info:
+        api_token: "{{ hcloud_token }}"
+        name: "{{ vpn_router_hostname }}"
+      register: server_info
+    - name: "Remove vpn-router"
+      hetzner.hcloud.hcloud_server:
+        api_token: "{{ hcloud_token }}"
+        name: "{{ vpn_router_hostname }}"
+        state: absent
+      notify: ["Remove from known_hosts"]
+    - name: Remove ssh_key from hetzner
+      hetzner.hcloud.hcloud_ssh_key:
+        api_token: "{{ hcloud_token }}"
+        name: admin-ssh-key
+        state: absent
+  handlers:
+    - name: "Remove from known_hosts"
+      ansible.builtin.known_hosts:
+        name: "{{ server_info.hcloud_server_info[0].ipv4_address }}"
+        state: absent
+
+
+- name: Cleanup DNS Records
+  hosts: localhost
+  vars_files:
+    - ../config.yml
+  gather_facts: false
+  tasks:
+    - name: Delete vpn gateway record
+      community.general.cloudflare_dns:
+        zone: "{{ cloudflare_zone }}"
+        record: "{{ vpn_record }}"
+        type: A
+        api_token: "{{ cloudflare_token }}"
+        state: absent
+
+- name: Cleanup local credentials
+  hosts: localhost
+  vars_files:
+    - ../config.yml
+  gather_facts: false
+  tasks:
+    - name: Remove credentials directory
+      ansible.builtin.file:
+        path: "{{ playbook_dir }}/../credentials"
+        state: absent
